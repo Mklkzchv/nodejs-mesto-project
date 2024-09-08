@@ -53,36 +53,42 @@ const getUserById = (req: Request, res: Response, next: NextFunction) => {
 //
 const updateProfile = (req: Request, res: Response, next: NextFunction) => {
   const { name, about } = req.body;
-  if (!name || !about) {
-    return res.status(STATUS_CODES.ERROR_CODE).send({ message: 'Переданы некорректные данные при обновлении профиля' });
-  }
-  return User.findByIdAndUpdate(req.user._id, { name, about }, { new: true })
+
+  return User.findByIdAndUpdate(req.user._id, { name, about }, { new: true, runValidators: true })
+    .orFail()
     .then((user) => {
-      if (!user) {
-        throw new NotFoundError('Пользователь с указанным _id не найден');
-      } else {
-        res.send({ data: user });
-      }
+      res.status(STATUS_CODES.OK).send(user);
     })
-    .catch(next);
+    .catch((err) => {
+      if (err.name === 'CastError') {
+        return next(new NotFoundError('Пользователь с указанным _id не найден'));
+      }
+      if (err.name === 'ValidationError') {
+        return next(new BadRequestError('Переданы некорректные данные при обновлении профиля'));
+      }
+      return next(err);
+    });
 };
 //
 // Контроллер обновления аватара юзера
 //
 const updateAvatar = (req: Request, res: Response, next: NextFunction) => {
   const { avatar } = req.body;
-  if (!avatar) {
-    return res.status(STATUS_CODES.ERROR_CODE).send({ message: 'Переданы некорректные данные при обновлении аватара' });
-  }
-  return User.findByIdAndUpdate(req.user._id, { avatar }, { new: true })
+
+  return User.findByIdAndUpdate(req.user._id, { avatar }, { new: true, runValidators: true })
+    .orFail()
     .then((user) => {
-      if (!user) {
-        throw new NotFoundError('Пользователь с указанным _id не найден');
-      } else {
-        res.send({ data: user });
-      }
+      res.status(STATUS_CODES.OK).send(user);
     })
-    .catch(next);
+    .catch((err) => {
+      if (err.name === 'CastError') {
+        return next(new NotFoundError('Пользователь с указанным _id не найден'));
+      }
+      if (err.name === 'ValidationError') {
+        return next(new BadRequestError('Переданы некорректные данные при обновлении аватара'));
+      }
+      return next(err);
+    });
 };
 
 export {

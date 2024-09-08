@@ -1,9 +1,12 @@
 import express, { NextFunction, Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { errors } from 'celebrate';
+import helmet from 'helmet';
 import usersRouter from './routes/users';
 import cardsRouter from './routes/cards';
 import NotFoundError from './utils/errors/NotFoundError';
+import errorHandler from './middlewares/errorHandler';
+import types from './types';
 
 mongoose.set('strictQuery', true);
 
@@ -15,16 +18,9 @@ mongoose.connect(MONGO_URL)
   .then(() => console.log('База данных подключена'))
   .catch((err) => console.log('Ошибка подключения к базе данных!', err));
 
+app.use(helmet());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
-
-declare global {
-  namespace Express {
-    interface Request {
-      user: { _id: string };
-    }
-  }
-}
 
 app.use((req: Request, res: Response, next: NextFunction) => {
   req.user = {
@@ -36,18 +32,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 app.use('/users', usersRouter);
 app.use('/cards', cardsRouter);
-
-const errorHandler = (err, req, res, next) => {
-  const {
-    statusCode = 500,
-    message,
-  } = err;
-  res.status(statusCode)
-    .send({
-      message: statusCode === 500 ? 'Ошибка сервера' : message,
-    });
-  next();
-};
 
 //
 // При переходе по несуществюущему пути
