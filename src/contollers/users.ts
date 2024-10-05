@@ -1,93 +1,133 @@
-import { NextFunction, Request, Response } from 'express';
-import User from '../models/user';
-import NotFoundError from '../utils/errors/NotFoundError';
-import BadRequestError from '../utils/errors/BadRequestError';
-import ConflictError from '../utils/errors/ConflictError';
-import { STATUS_CODES } from '../utils/constants';
+import { Request, Response, NextFunction } from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import User, { IUser } from '../models/user';
+import NotFoundError from '../utils/errors/not-found';
+import BadRequestError from '../utils/errors/bad-request';
+import ConflictError from '../utils/errors/conflict';
+import { StatusCodes } from '../utils/errors/http-status-codes';
 
-//
-// Функция получения юзеров
-//
-const getUsers = (req: Request, res: Response, next: NextFunction) => User.find({})
-  .then((users) => res.status(STATUS_CODES.OK).send({ data: users }))
-  .catch(next);
-
-//
-// Контроллер создания юзера
-//
-const createUser = (req: Request, res: Response, next: NextFunction) => {
-  const { name, about, avatar } = req.body;
-  return User.create({ name, about, avatar })
-    .then((user) => res.status(STATUS_CODES.CREATED).send({ data: user }))
-    .catch((err) => {
-      if (err.name === 'ValidationError') {
-        return next(new BadRequestError('Переданы некорректные данные при создании пользователя'));
-      }
-      if (err.code === 11000) {
-        return next(new ConflictError('Пользователь с таким email уже существует!'));
-      }
-      return next(err);
-    });
+const getUsers = (req: Request, res: Response, next: NextFunction) => {
+  return User.find({})
+    .then((users) => res.send(users))
+    .catch(next);
 };
-//
-// Контроллер получения информации о пользователе
-//
+
 const getUserById = (req: Request, res: Response, next: NextFunction) => {
-  User.findById(req.params.userId)
-    .orFail()
-    .then((user) => {
-      res.status(STATUS_CODES.OK).send({ data: user });
-    })
-    .catch((err) => {
-      if (err.name === 'DocumentNotFoundError') {
-        return next(new NotFoundError('Пользователь по указанному _id не найден'));
-      }
-      if (err.name === 'CastError') {
-        return next(new BadRequestError('Переданы некорректные данные'));
-      }
-      return next(err);
-    });
+  return User.findOne({ _id: req.params.userId })
+    .orFail(() => new NotFoundError({ message: 'Пользователя не существует' }))
+    .then((user) => res.send(user))
+    .catch(next);
 };
-//
-// Контроллер обновления информации юзера
-//
+
+const createUser = (req: Request, res: Response, next: NextFunction) => {
+  const { name, about, avatar, email, password } = req.body;
+  bcrypt
+    .hash(password, 10)
+    .then((hash: string) => {
+      User.create({
+        name,
+        about,
+        avatar,
+        email,
+        password: hash,
+      })
+        .then((user: IUser) => {
+          res.status(201).send({
+            name: user.name,
+            email: user.email,
+            about: user.about,
+            avatar: user.avatar,
+          });
+        })
+        .catch((err) => {
+          if (err.code === 11000) {
+            next(new ConflictError({ message: 'Пользователь уже существует' }));
+          } else if (err.name === 'ValidationError') {
+            next(new BadRequestError({ message: 'Некорректные данные' }));
+          } else {
+            next(err);
+          }
+        })
+        .catch(next);
+    })
+    .catch(next);
+};
+
 const updateProfile = (req: Request, res: Response, next: NextFunction) => {
   const { name, about } = req.body;
 
-  return User.findByIdAndUpdate(req.user._id, { name, about }, { new: true, runValidators: true })
-    .orFail()
-    .then((user) => {
-      res.status(STATUS_CODES.OK).send(user);
-    })
+  User.findByIdAndUpdate(
+    req.user._id,
+    { name, about },
+    {
+      new: true,
+      runValidators: true,
+    },
+  )
+    .orFail(() => new NotFoundError({ message: 'Пользователя не существует' }))
+    .then((user) => res.status(StatusCodes.OK).send(user))
     .catch((err) => {
-      if (err.name === 'CastError') {
-        return next(new NotFoundError('Пользователь с указанным _id не найден'));
-      }
       if (err.name === 'ValidationError') {
-        return next(new BadRequestError('Переданы некорректные данные при обновлении профиля'));
+        next(new BadRequestError({ message: 'Некорректные данные' }));
+      } else {
+        next(err);
       }
-      return next(err);
-    });
+    })
+    .catch(next);
 };
-//
-// Контроллер обновления аватара юзера
-//
+
 const updateAvatar = (req: Request, res: Response, next: NextFunction) => {
   const { avatar } = req.body;
 
-  return User.findByIdAndUpdate(req.user._id, { avatar }, { new: true, runValidators: true })
-    .orFail()
-    .then((user) => {
-      res.status(STATUS_CODES.OK).send(user);
+  User.findByIdAndUpdate(
+    req.user._id,
+    { avatar },
+    {
+      new: true,
+      runValidators: true,
+    },
+  )
+    .orFail(() => new NotFoundError({ message: 'Пользователя не существует' }))
+    .then((user) => res.status(StatusCodes.OK).send(user))
+    .catch((err) => {
+      if (err.name === 'ValidationError') {
+        next(new BadRequestError({ message: 'Некорректные данные' }));
+      } else {
+        next(err);
+      }
     })
+    .catch(next);
+};
+
+const loginUser = (req: Request, res: Response, next: NextFunction) => {
+  const { email, password } = req.body;
+
+  return User.findUserByCredentials(email, password)
+    .then((user) => {
+      const token = jwt.sign({ _id: user._id }, 'key', {
+        expiresIn: '7d',
+      });
+      res
+        .cookie('jwt', token, {
+          maxAge: 3600000 * 24 * 7,
+          httpOnly: true,
+          sameSite: true,
+        })
+        .send({ message: 'ok' });
+    })
+    .catch(next);
+};
+
+const findUser = (req: Request, res: Response, next: NextFunction) => {
+  console.log("!!", req.user._id);
+  return User.findById(req.user._id)
+    .orFail(() => new NotFoundError({ message: 'Пользователя не существует' }))
+    .then((user) => res.status(StatusCodes.OK).send(user))
     .catch((err) => {
       if (err.name === 'CastError') {
-        return next(new NotFoundError('Пользователь с указанным _id не найден'));
-      }
-      if (err.name === 'ValidationError') {
-        return next(new BadRequestError('Переданы некорректные данные при обновлении аватара'));
-      }
-      return next(err);
+        next(new BadRequestError({ message: 'Некорректные данные' }));
+      } else next(err);
     });
 };
 
@@ -97,4 +137,6 @@ export {
   createUser,
   updateProfile,
   updateAvatar,
+  loginUser,
+  findUser,
 };

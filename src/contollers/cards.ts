@@ -1,88 +1,89 @@
 import { NextFunction, Request, Response } from 'express';
 import Card from '../models/card';
-import NotFoundError from '../utils/errors/NotFoundError';
-import BadRequestError from '../utils/errors/BadRequestError';
-import { STATUS_CODES } from '../utils/constants';
+import BadRequestError from '../utils/errors/bad-request';
+import NotFoundError from '../utils/errors/not-found';
+import ForbiddenError from '../utils/errors/forbidden-error';
+import { StatusCodes } from '../utils/errors/http-status-codes';
 
-//
-// Функция получения карточек
-//
-export const getCards = (req: Request, res: Response) => Card.find({})
-  .then((cards) => res.status(STATUS_CODES.OK).send({ data: cards }))
-  .catch(() => res.status(STATUS_CODES.SERVER_ERROR).send({ message: 'Произошла ошибка' }));
-//
-// Функция удаления карточки
-//
-export const deleteCard = (req: Request, res: Response, next: NextFunction) => {
-  Card.findByIdAndDelete(req.params.cardId)
+const getCards = (req: Request, res: Response, next: NextFunction) => {
+  return Card.find({})
+    .then((users) => res.send(users))
+    .catch(next);
+};
 
-    .then((card) => {
-      if (!card) {
-        throw new NotFoundError('Карточка с указанным _id не найдена');
+const createCard = (req: Request, res: Response, next: NextFunction) => {
+  const { name, link } = req.body;
+  const owner = req.user._id;
+
+  return Card.create({
+    name,
+    link,
+    owner,
+  })
+    .then((card) => res.status(StatusCodes.CREATED).send(card))
+    .catch((err) => {
+      if (err.name === 'ValidationError') {
+        next(new BadRequestError({ message: 'Некорректные данные' }));
       } else {
-        res.send({ data: card });
+        next(err);
       }
     })
     .catch(next);
 };
-//
-// Функция создания карточек
-//
-export const createCard = (req: Request, res: Response) => {
-  const { name, link } = req.body;
+
+const deleteCard = (req: Request, res: Response, next: NextFunction) => {
+  return Card.findById(req.params.cardId)
+    .orFail(new NotFoundError({ message: 'Карточки не существует' }))
+    .then((card) => {
+      if (card.owner.toString() !== req.user._id) {
+        next(new ForbiddenError({ message: 'Ошибка прав доступа' }));
+      } else {
+        Card.findByIdAndDelete(req.params.cardId)
+          .then((cardInfo) => res.send(cardInfo))
+          .catch(next);
+      }
+    })
+    .catch(next);
+};
+
+const likeCard = (req: Request, res: Response, next: NextFunction) => {
   const owner = req.user._id;
 
-  if (!name || !link || !owner) {
-    return res.status(STATUS_CODES.ERROR_CODE).send({ message: 'Переданы некорректные данные при создании карточки' });
-  }
+  return Card.findByIdAndUpdate(
+    req.params.cardId,
+    { $addToSet: { likes: owner } },
+    { new: true },
+  )
+    .orFail(new NotFoundError({ message: 'Карточки не существует' }))
+    .then((card) => res.send(card))
+    .catch((err) => {
+      if (err.name === 'CastError') {
+        next(new BadRequestError({ message: 'Некорректные данные' }));
+      } else {
+        next(err);
+      }
+    })
+    .catch(next);
+};
 
-  return Card.create({ name, link, owner })
-    .then((card) => res.status(STATUS_CODES.CREATED).send({ data: card }))
-    .catch(() => res.status(STATUS_CODES.SERVER_ERROR).send({ message: 'Произошла ошибка' }));
-};
-//
-// Контроллер постановки лайка
-//
-export const likeCard = (req: Request, res: Response, next: NextFunction) => {
-  Card.findByIdAndUpdate(
+const dislikeCard = (req: Request, res: Response, next: NextFunction) => {
+  const owner = req.user._id;
+
+  return Card.findByIdAndUpdate(
     req.params.cardId,
-    { $addToSet: { likes: req.user._id } },
+    { $pull: { likes: owner } },
     { new: true },
   )
-    .orFail()
-    .then((card) => {
-      res.status(STATUS_CODES.OK).send(card);
-    })
+    .orFail(new NotFoundError({ message: 'Карточки не существует' }))
+    .then((card) => res.send(card))
     .catch((err) => {
-      if (err.name === 'DocumentNotFoundError') {
-        return next(new NotFoundError('Передан несуществующий _id карточки'));
-      }
       if (err.name === 'CastError') {
-        return next(new BadRequestError('Переданы некорректные данные для постановки лайка'));
+        next(new BadRequestError({ message: 'Некорректные данные' }));
+      } else {
+        next(err);
       }
-      return next(err);
-    });
-};
-//
-// Контроллер удаления лайка
-//
-export const dislikeCard = (req: Request, res: Response, next: NextFunction) => {
-  Card.findByIdAndUpdate(
-    req.params.cardId,
-    { $pull: { likes: req.user._id } },
-    { new: true },
-  )
-    .orFail()
-    .then((card) => {
-      res.status(STATUS_CODES.OK).send(card);
     })
-    .catch((err) => {
-      if (err.name === 'DocumentNotFoundError') {
-        return next(new NotFoundError('Передан несуществующий _id карточки'));
-      }
-      if (err.name === 'CastError') {
-        return next(new BadRequestError('Переданы некорректные данные для снятия лайка'));
-      }
-      return next(err);
-    });
+    .catch(next);
 };
+
+export { getCards, createCard, deleteCard, likeCard, dislikeCard };
