@@ -4,21 +4,17 @@ import mongoose from 'mongoose';
 import { errors } from 'celebrate';
 import helmet from 'helmet';
 import path from 'path';
-
 import { errorHandler } from './utils/errors/error-handler';
 import types from './types';
 import auth from './middlewares/auth';
 import { createUser, loginUser } from './contollers/users';
 import { requestLogger, errorLogger } from './middlewares/logger';
 import { userLoginValidate } from './middlewares/validate';
-
 import usersRouter from './routes/users';
 import cardsRouter from './routes/cards';
 import NotFoundError from './utils/errors/not-found';
 
-
 const cookieParser = require('cookie-parser');
-
 const { PORT = 3000, MONGO_URL = 'mongodb://127.0.0.1:27017/mestodb' } = process.env;
 
 const startServer = () => {
@@ -46,8 +42,9 @@ const startServer = () => {
   });
 
   app.use(errorLogger);
-  app.use(errorHandler);
   app.use(errors());
+  app.use(errorHandler);
+
 
   app.listen(PORT, () => {
     console.log(`App listening on port ${PORT}`);

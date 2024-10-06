@@ -9,8 +9,8 @@ import {
 const usersRouter = Router();
 
 usersRouter.get('/', getUsers);
-usersRouter.get('/:userId', userIdValidate, getUserById);
 usersRouter.get('/me', findUser); // возвращаем информацию о текущем пользователе
+usersRouter.get('/:userId', userIdValidate, getUserById);
 usersRouter.patch('/me', userUpdateValidate, updateProfile);
 usersRouter.patch('/me/avatar', userUpdateAvatarValidate, updateAvatar);
 
