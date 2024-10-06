@@ -2,7 +2,7 @@ import { Router } from 'express';
 import {
   createCard, deleteCard, dislikeCard, getCards, likeCard,
 } from '../contollers/cards';
-import { cardValidate, cardIdValidate } from '../ middlewares/validate';
+import { cardValidate, cardIdValidate } from '../middlewares/validate';
 
 const cardsRouter = Router();
 

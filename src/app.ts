@@ -7,10 +7,10 @@ import path from 'path';
 
 import { errorHandler } from './utils/errors/error-handler';
 import types from './types';
-import auth from './ middlewares/auth';
+import auth from './middlewares/auth';
 import { createUser, loginUser } from './contollers/users';
-import { requestLogger, errorLogger } from './ middlewares/logger';
-import { userLoginValidate } from './ middlewares/validate';
+import { requestLogger, errorLogger } from './middlewares/logger';
+import { userLoginValidate } from './middlewares/validate';
 
 import usersRouter from './routes/users';
 import cardsRouter from './routes/cards';
@@ -36,7 +36,6 @@ const startServer = () => {
   app.use(helmet());
   app.post('/signup', userLoginValidate, createUser);
   app.post('/signin', userLoginValidate, loginUser);
-
 
   app.use(auth);
   app.use('/users', usersRouter);

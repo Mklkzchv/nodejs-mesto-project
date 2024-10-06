@@ -4,7 +4,7 @@ import {
 } from '../contollers/users';
 import {
   userIdValidate, userUpdateAvatarValidate, userUpdateValidate,
-} from '../ middlewares/validate';
+} from '../middlewares/validate';
 
 const usersRouter = Router();
 
